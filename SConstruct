@@ -1,16 +1,18 @@
-env = Environment()
+env = Environment( CC = '/opt/local/bin/gcc', CXX = '/opt/local/bin/g++' )
+#env = Environment()
 
-env.Tool('gcc')
+print "CC is:", env['CC']
+print "CXX is:", env['CXX']
 
-env.Append(CPPPATH = ['/usr/include/'])
+env.Append(CPPPATH = ['/opt/local/include/'])
 
-env.Append(CCFLAGS = ['-g', '-std=c++1y', '-pthread'])
+env.Append(CPPFLAGS = ['-O3', '-std=c++11', '-pthread'])
 
-env.Append(LIBPATH = ['/usr/lib/'])
+env.Append(LIBPATH = ['/opt/local/lib/'])
 
 env.Append(LIBS = ['pthread'])
 
-env.Append(LINKFLAGS = ['-Wl,--no-as-needed'])
+#env.Append(LINKFLAGS = ['-Wl,--no-as-needed'])
 
 t = env.Program(target='main', source=['./openmplike.cpp', './main.cpp'])
 
