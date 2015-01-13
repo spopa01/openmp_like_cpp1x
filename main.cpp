@@ -8,9 +8,9 @@
 #include <queue>
 
 template<typename T>
-class naive_concurrent_queue{
+class basic_concurrent_queue{
 public:
-  naive_concurrent_queue() {}
+  basic_concurrent_queue() {}
 
   void push(T const& t){
     std::lock_guard<std::mutex> lg{m_};
@@ -25,7 +25,7 @@ public:
     return t;
   }
 
-  bool pop(T& t){
+  bool try_pop(T& t){
     std::lock_guard<std::mutex> lg{m_};
     if(q_.empty()) return false;
     t = q_.front(); q_.pop();
@@ -39,48 +39,52 @@ private:
 };
 
 int main(/*...*/){
-  naive_concurrent_queue<int> queue;
+  basic_concurrent_queue<int> queue;
 
-  const size_t NT = 4;          //number of threads
-  const size_t NPT = 100000;    //number of samples per thread
+  const size_t number_of_threads = 4;
+  const size_t number_of_samples_per_thread = 100000;
 
-  const size_t N = NT*NPT/2;    //total number of samples
+  // N/2 because we will create a prodcer/consumer scenario
+  const size_t total_number_of_samples = 
+    number_of_threads * number_of_samples_per_thread / 2;
 
-  std::array<int, N> values_computed;
-  std::array<int, N> values_expected;
+  std::array<int, total_number_of_samples> computed_values;
+  std::array<int, total_number_of_samples> expected_values;
 
-  for( auto i=0; i<N; ++i )
-    values_expected[ i ] = i;
+  for( auto i=0; i<total_number_of_samples; ++i )
+    expected_values[ i ] = i*2;
+  
+  //we will collect some stats about the threads...
+  std::array<int, number_of_threads> stats;
 
-  std::atomic<int> count{0};
+  //the following scenario works simply because we produce and consume exactly N samples...
+  std::atomic<int> counter{0};
 
-  std::array<int, NT> stats;
+  //(A NOT SO USEFUL) OPENMP LIKE CONSTRUCT
+  parallel_do( number_of_threads, &queue, &computed_values, &counter, &stats ){
 
-  //OPENMP LIKE CONSTRUCT
-  parallel_do(NT, &queue, &values_computed, &count, &stats ){
-
-    //SPLIT THE THREADS GANG...
-    //first half of threads is producing and the other half is consuming...
-    split( thread_num < NT/2 ){
-      for( int i=0; i<NPT; ++i ){
+    //SPLIT THE THREADS GANG... IN PRODUCES AND CONSUMERS
+    split( thread_num < number_of_threads/2 ){  //-> first half of threads is producing ...
+      for( int i=0; i<number_of_samples_per_thread; ++i ){
         stats[thread_num]++; //produced
-        queue.push( thread_num * NPT + i );
+        queue.push( thread_num * number_of_samples_per_thread + i );
       }
-    }else{
+    }else{                                      //-> and the other half is consuming...
       int value;
-      while( count < N ){
-        if( queue.pop( value ) ){
+      while( counter < total_number_of_samples ){
+        if( queue.try_pop( value ) ){
           stats[thread_num]++; //consumed
-          values_computed[ count++ ] = value;
+          computed_values[ counter++ ] = value*2;
         }
       }
     }
 
   }end_wait;
 
-  std::sort( values_computed.begin(), values_computed.end() );
+  //the computed_values must be the same as in expected_values but in a different order at the moment...
+  std::sort( computed_values.begin(), computed_values.end() );
 
-  std::cout << "TEST ... " << (values_computed == values_expected ? "PASSED" : "FAILED") << std::endl;
+  std::cout << "TEST ... " << (computed_values == expected_values ? "PASSED" : "FAILED") << std::endl;
 
   std::cout << "STATS:" << std::endl;
   for( auto & stat : stats )
